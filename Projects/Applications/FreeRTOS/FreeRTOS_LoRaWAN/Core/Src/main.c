@@ -22,6 +22,8 @@
 #include "cmsis_os.h"
 #include "app_lorawan.h"
 #include "sys_app.h"
+#include "stm32wlxx_hal.h"
+#include "stm32wlxx_hal_rtc_ex.h"
 
 #include "DHT.h"
 
@@ -46,8 +48,9 @@ int32_t LED_control(int value);
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-DHT_DataTypedef DHT22_Data;
-float temp,hum;
+DHT_DataTypedef DHT_Data;
+float temp = 2;
+float hum;
 
 /* USER CODE END PTD */
 
@@ -105,12 +108,13 @@ int main(void)
   /* USER CODE BEGIN SysInit */
   MX_GPIO_Init();
   MX_LPTIM1_Init();
+  MX_LoRaWAN_Init();
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
   /* USER CODE BEGIN 2 */
-  osThreadDef(LED_Task, StartLedTask, osPriorityNormal, 0, 128);
-  LED_TaskHandle = osThreadCreate(osThread(LED_Task), NULL);
+  //osThreadDef(LED_Task, StartLedTask, osPriorityNormal, 0, 128);
+  //LED_TaskHandle = osThreadCreate(osThread(LED_Task), NULL);
   osThreadDef(LoRaWAN_Task, StartLoRaWANTask, osPriorityNormal, 0, 1024);
   LoRaWAN_TaskHandle = osThreadCreate(osThread(LoRaWAN_Task), NULL);
   osKernelStart();
@@ -241,11 +245,11 @@ void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
 
-  GPIO_InitStruct.Pin = GPIO_PIN_0;
+  /*GPIO_InitStruct.Pin = GPIO_PIN_0;
  	  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
  	  GPIO_InitStruct.Pull = GPIO_NOPULL;
  	  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
- 	  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+ 	  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);*/
   /* Initialize GPIOB Pin 10 */
 
  	  	 	 GPIO_InitStruct.Pin = GPIO_PIN_10;
@@ -269,27 +273,6 @@ int32_t LED_control(int value) {
 /* USER CODE END 4 */
 /* USER CODE BEGIN 4 */
 
-void StartLedTask(void const * argument)
-{
- // LED_control(1);
-  for(;;)
-  {
-	/*LED_control(0);
-	osDelay(500);
-	LED_control(1);
-	osDelay(500);
-	*/
-	           DHT_GetData(&DHT22_Data);
-	  	 	  	   temp = (DHT22_Data.Temperature)/10;
-	  	 	  	   hum = DHT22_Data.Humidity;
-	  	 	  	   HAL_Delay(2000);
-
-
-
-
-  }
-}
-
 void StartLoRaWANTask(void const * argument)
 {
   /* init code for LoRaWAN */
@@ -298,24 +281,37 @@ void StartLoRaWANTask(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-	 /* DHT_GetData(&DHT11_Data);
-	  	  	 	  	   temp = (DHT11_Data.Temperature)/10;
-	  	  	 	  	   hum = DHT11_Data.Humidity;
-	  	  	 	  	   HAL_Delay(2000);*/
+	   /*    DHT_GetData(&DHT11_Data);
+	  	   temp = (DHT11_Data.Temperature)/10;
+	  	   hum = DHT11_Data.Humidity;
+	  	   HAL_Delay(1000);
+*/
 
-
-
-	MX_LoRaWAN_Process();
-    osDelay(10);
+			MX_LoRaWAN_Process();
+			osDelay(10);
   }
   /* USER CODE END 5 */
 }
-/* USER CODE END 4 */
 
-/**
-  * @brief  This function is executed in case of error occurrence.
-  * @retval None
-  */
+
+/* USER CODE END 4 */
+void StartLedTask(void const * argument)
+{
+  LED_control(1);
+  for(;;)
+  {  //APP_LOG(TS_OFF, VLEVEL_M, "hfhzebfuiaenqfazqfuhaefubzafua \n");
+	 DHT_GetData(&DHT_Data);
+	 temp = (DHT_Data.Temperature)/10;
+	 hum = DHT_Data.Humidity;
+	 HAL_Delay(5000);
+
+
+	/*LED_control(0);
+	osDelay(4000);
+	LED_control(1);
+	osDelay(4000);*/
+  }
+}
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */

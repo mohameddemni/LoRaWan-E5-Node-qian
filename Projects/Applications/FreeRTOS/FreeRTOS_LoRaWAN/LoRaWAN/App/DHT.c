@@ -1,11 +1,3 @@
-/*
- * DHT.c
- *
- *  Created on: Mar 15, 2023
- *      Author: Mega-PC
- */
-
-
 
 
 /************** MAKE CHANGES HERE ********************/
@@ -17,7 +9,7 @@
 
 
 #define DHT_PORT GPIOA
-#define DHT_PIN GPIO_PIN_0
+#define DHT_PIN GPIO_PIN_9
 
 
 
@@ -93,7 +85,7 @@ void Set_Pin_Input (GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin)
 
 void DHT_Start (void)
 {
-	DWT_Delay_Init();
+
 	Set_Pin_Output (DHT_PORT, DHT_PIN);  // set the pin as output
 	HAL_GPIO_WritePin (DHT_PORT, DHT_PIN, 0);   // pull the pin low
 
@@ -120,7 +112,7 @@ uint8_t DHT_Check_Response (void)
 		if ((HAL_GPIO_ReadPin (DHT_PORT, DHT_PIN))) Response = 1;
 		else Response = -1;
 	}
-	while ((HAL_GPIO_ReadPin (DHT_PORT, DHT_PIN)));   // wait for the pin to go low
+   while ((HAL_GPIO_ReadPin (DHT_PORT, DHT_PIN)));   // wait for the pin to go low
 
 	return Response;
 }
@@ -145,7 +137,7 @@ uint8_t DHT_Read (void)
 
 
 void DHT_GetData (DHT_DataTypedef *DHT_Data)
-{
+{   DWT_Delay_Init();
     DHT_Start ();
 	Presence = DHT_Check_Response ();
 	Rh_byte1 = DHT_Read ();
@@ -154,9 +146,7 @@ void DHT_GetData (DHT_DataTypedef *DHT_Data)
 	Temp_byte2 = DHT_Read ();
 	SUM = DHT_Read();
 
-	if (SUM == (Rh_byte1+Rh_byte2+Temp_byte1+Temp_byte2))
-	{
-		#if defined(TYPE_DHT11)
+			#if defined(TYPE_DHT11)
 			DHT_Data->Temperature = Temp_byte1;
 			DHT_Data->Humidity = Rh_byte1;
 		#endif
@@ -165,7 +155,7 @@ void DHT_GetData (DHT_DataTypedef *DHT_Data)
 			DHT_Data->Temperature = ((Temp_byte1<<8)|Temp_byte2);
 			DHT_Data->Humidity = ((Rh_byte1<<8)|Rh_byte2);
 		#endif
-	}
+
 }
 
 

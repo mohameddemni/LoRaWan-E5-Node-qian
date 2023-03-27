@@ -38,15 +38,18 @@
 #include "CayenneLpp.h"
 #include "sys_sensors.h"
 
+
+#include "DHT.h"
+
+
 /* USER CODE BEGIN Includes */
 
 /* USER CODE END Includes */
 
 /* External variables ---------------------------------------------------------*/
 /* USER CODE BEGIN EV */
+
  extern float temp,hum;
-
-
 
 /* USER CODE END EV */
 
@@ -122,6 +125,24 @@ static void OnMacProcessNotify(void);
 
 /* USER CODE BEGIN PFP */
 
+/**
+  * @brief  LED Tx timer callback function
+  * @param  context ptr of LED context
+  */
+static void OnTxTimerLedEvent(void *context);
+
+/**
+  * @brief  LED Rx timer callback function
+  * @param  context ptr of LED context
+  */
+static void OnRxTimerLedEvent(void *context);
+
+/**
+  * @brief  LED Join timer callback function
+  * @param  context ptr of LED context
+  */
+static void OnJoinTimerLedEvent(void *context);
+
 /* USER CODE END PFP */
 
 /* Private variables ---------------------------------------------------------*/
@@ -180,6 +201,23 @@ static LmHandlerAppData_t AppData = { 0, 0, AppDataBuffer };
   */
 static uint8_t AppLedStateOn = RESET;
 
+/**
+  * @brief Timer to handle the application Tx Led to toggle
+  */
+static UTIL_TIMER_Object_t TxLedTimer;
+
+/**
+  * @brief Timer to handle the application Rx Led to toggle
+  */
+static UTIL_TIMER_Object_t RxLedTimer;
+
+/**
+  * @brief Timer to handle the application Join Led to toggle
+  */
+static UTIL_TIMER_Object_t JoinLedTimer;
+
+/* USER CODE END PV */
+
 /* Exported functions ---------------------------------------------------------*/
 /* USER CODE BEGIN EF */
 
@@ -187,65 +225,72 @@ static uint8_t AppLedStateOn = RESET;
 
 void LoRaWAN_Init(void)
 {
-  /* USER CODE BEGIN LoRaWAN_Init_1 */
+	 BSP_LED_Init(LED_RED);
 
-  BSP_LED_Init(LED_RED);
-  BSP_PB_Init(BUTTON_SW1, BUTTON_MODE_EXTI);
+	  /* Get LoRa APP version*/
+	  APP_LOG(TS_OFF, VLEVEL_M, "APP_VERSION:        V%X.%X.%X\r\n",
+	          (uint8_t)(__LORA_APP_VERSION >> __APP_VERSION_MAIN_SHIFT),
+	          (uint8_t)(__LORA_APP_VERSION >> __APP_VERSION_SUB1_SHIFT),
+	          (uint8_t)(__LORA_APP_VERSION >> __APP_VERSION_SUB2_SHIFT));
 
-  /* Get LoRa APP version*/
-  APP_LOG(TS_OFF, VLEVEL_M, "APP_VERSION:        V%X.%X.%X\r\n",
-          (uint8_t)(__LORA_APP_VERSION >> __APP_VERSION_MAIN_SHIFT),
-          (uint8_t)(__LORA_APP_VERSION >> __APP_VERSION_SUB1_SHIFT),
-          (uint8_t)(__LORA_APP_VERSION >> __APP_VERSION_SUB2_SHIFT));
+	  /* Get MW LoraWAN info */
+	  APP_LOG(TS_OFF, VLEVEL_M, "MW_LORAWAN_VERSION: V%X.%X.%X\r\n",
+	          (uint8_t)(__LORAWAN_VERSION >> __APP_VERSION_MAIN_SHIFT),
+	          (uint8_t)(__LORAWAN_VERSION >> __APP_VERSION_SUB1_SHIFT),
+	          (uint8_t)(__LORAWAN_VERSION >> __APP_VERSION_SUB2_SHIFT));
 
-  /* Get MW LoraWAN info */
-  APP_LOG(TS_OFF, VLEVEL_M, "MW_LORAWAN_VERSION: V%X.%X.%X\r\n",
-          (uint8_t)(__LORAWAN_VERSION >> __APP_VERSION_MAIN_SHIFT),
-          (uint8_t)(__LORAWAN_VERSION >> __APP_VERSION_SUB1_SHIFT),
-          (uint8_t)(__LORAWAN_VERSION >> __APP_VERSION_SUB2_SHIFT));
+	  /* Get MW SubGhz_Phy info */
+	  APP_LOG(TS_OFF, VLEVEL_M, "MW_RADIO_VERSION:   V%X.%X.%X\r\n",
+	          (uint8_t)(__SUBGHZ_PHY_VERSION >> __APP_VERSION_MAIN_SHIFT),
+	          (uint8_t)(__SUBGHZ_PHY_VERSION >> __APP_VERSION_SUB1_SHIFT),
+	          (uint8_t)(__SUBGHZ_PHY_VERSION >> __APP_VERSION_SUB2_SHIFT));
 
-  /* Get MW SubGhz_Phy info */
-  APP_LOG(TS_OFF, VLEVEL_M, "MW_RADIO_VERSION:   V%X.%X.%X\r\n",
-          (uint8_t)(__SUBGHZ_PHY_VERSION >> __APP_VERSION_MAIN_SHIFT),
-          (uint8_t)(__SUBGHZ_PHY_VERSION >> __APP_VERSION_SUB1_SHIFT),
-          (uint8_t)(__SUBGHZ_PHY_VERSION >> __APP_VERSION_SUB2_SHIFT));
-  APP_LOG(TS_OFF, VLEVEL_M, "\r\n\r\n\r\n----------LoRaWAN_End_Node_FreeRTOS----------\r\n\r\n\r\n");
-  /* USER CODE END LoRaWAN_Init_1 */
+	  UTIL_TIMER_Create(&TxLedTimer, 0xFFFFFFFFU, UTIL_TIMER_ONESHOT, OnTxTimerLedEvent, NULL);
+	  UTIL_TIMER_Create(&RxLedTimer, 0xFFFFFFFFU, UTIL_TIMER_ONESHOT, OnRxTimerLedEvent, NULL);
+	  UTIL_TIMER_Create(&JoinLedTimer, 0xFFFFFFFFU, UTIL_TIMER_PERIODIC, OnJoinTimerLedEvent, NULL);
+	  UTIL_TIMER_SetPeriod(&TxLedTimer, 500);
+	  UTIL_TIMER_SetPeriod(&RxLedTimer, 500);
+	  UTIL_TIMER_SetPeriod(&JoinLedTimer, 500);
 
-  UTIL_SEQ_RegTask((1 << CFG_SEQ_Task_LmHandlerProcess), UTIL_SEQ_RFU, LmHandlerProcess);
-  UTIL_SEQ_RegTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), UTIL_SEQ_RFU, SendTxData);
-  /* Init Info table used by LmHandler*/
-  LoraInfo_Init();
+	  /* USER CODE END LoRaWAN_Init_1 */
 
-  /* Init the Lora Stack*/
-  LmHandlerInit(&LmHandlerCallbacks);
+	  UTIL_SEQ_RegTask((1 << CFG_SEQ_Task_LmHandlerProcess), UTIL_SEQ_RFU, LmHandlerProcess);
+	  UTIL_SEQ_RegTask((1 << CFG_SEQ_Task_LoRaSendOnTxTimerOrButtonEvent), UTIL_SEQ_RFU, SendTxData);
+	  /* Init Info table used by LmHandler*/
+	  LoraInfo_Init();
 
-  LmHandlerConfigure(&LmHandlerParams);
+	  /* Init the Lora Stack*/
+	  LmHandlerInit(&LmHandlerCallbacks);
 
+	  LmHandlerConfigure(&LmHandlerParams);
 
-  /* USER CODE END LoRaWAN_Init_2 */
+	  /* USER CODE BEGIN LoRaWAN_Init_2 */
+	  UTIL_TIMER_Start(&JoinLedTimer);
 
-  LmHandlerJoin(ActivationType);
+	  /* USER CODE END LoRaWAN_Init_2 */
 
-  if (EventType == TX_ON_TIMER)
-  {
-    /* send every time timer elapses */
-    UTIL_TIMER_Create(&TxTimer,  0xFFFFFFFFU, UTIL_TIMER_ONESHOT, OnTxTimerEvent, NULL);
-    UTIL_TIMER_SetPeriod(&TxTimer,  APP_TX_DUTYCYCLE);
-    UTIL_TIMER_Start(&TxTimer);
-  }
-  else
-  {
-    /* USER CODE BEGIN LoRaWAN_Init_3 */
+	  LmHandlerJoin(ActivationType);
 
-    /* send every time button is pushed */
-    BSP_PB_Init(BUTTON_SW1, BUTTON_MODE_EXTI);
-    /* USER CODE END LoRaWAN_Init_3 */
-  }
+	  if (EventType == TX_ON_TIMER)
+	  {
+	    /* send every time timer elapses */
+	    UTIL_TIMER_Create(&TxTimer,  0xFFFFFFFFU, UTIL_TIMER_ONESHOT, OnTxTimerEvent, NULL);
+	    UTIL_TIMER_SetPeriod(&TxTimer,  APP_TX_DUTYCYCLE);
+	    UTIL_TIMER_Start(&TxTimer);
+	  }
+	  else
+	  {
+	    /* USER CODE BEGIN LoRaWAN_Init_3 */
 
-  /* USER CODE BEGIN LoRaWAN_Init_Last */
+	    /* send every time button is pushed */
+	    BSP_PB_Init(BUTTON_SW1, BUTTON_MODE_EXTI);
+	    /* USER CODE END LoRaWAN_Init_3 */
+	  }
 
-  /* USER CODE END LoRaWAN_Init_Last */
+	  /* USER CODE BEGIN LoRaWAN_Init_Last */
+
+	  /* USER CODE END LoRaWAN_Init_Last */
+
 }
 
 /* USER CODE BEGIN PB_Callbacks */
@@ -282,6 +327,9 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
   /* USER CODE BEGIN OnRxData_1 */
   if ((appData != NULL) || (params != NULL))
   {
+
+    UTIL_TIMER_Start(&RxLedTimer);
+
     static const char *slotStrings[] = { "1", "2", "C", "C Multicast", "B Ping-Slot", "B Multicast Ping-Slot" };
 
     APP_LOG(TS_OFF, VLEVEL_M, "\r\n###### ========== MCPS-Indication ==========\r\n");
@@ -342,21 +390,26 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
 
 static void SendTxData(void)
 {
-	//extern
+	DHT_DataTypedef DHT_Data;
+    //float temp = 2 ;
+	//float hum;
+	  DHT_GetData(&DHT_Data);
+	  temp = (DHT_Data.Temperature)/10;
+	  hum = (DHT_Data.Humidity)/10;
+	  HAL_Delay(3000);
 
-   // int16_t	  temperature =0;
-	//int16_t	  humidity=0;
 
-	//float temp=25;
-	//float hum=505;
+	/*int16_t temperature= (int16_t) temp;
+	int16_t humidity = (int16_t) hum;*/
 
-	int8_t temperature= (int8_t) temp;
-	int16_t humidity = (int16_t) hum;
-
+	// int8_t	  temperature =0;
+	//  int16_t	  humidity=0;
 
 	  // Convert the float to a hex value using type casting
-	// temperature = *((uint16_t*)&temp);
-	 // humidity = *((uint16_t*)&hum);
+	int16_t temperature = (uint16_t) temp;
+	int16_t humidity = (uint16_t) hum;
+
+
 
 
   //sensor_t sensor_data;
@@ -403,11 +456,10 @@ static void SendTxData(void)
   AppData.Buffer[i++] = (uint8_t)(humidity & 0xFF);
 *******************/
 
-  AppData.Buffer[i++] = temperature;
-  //AppData.Buffer[i++] = humidity;
+  AppData.Buffer[i++] = (uint16_t) temperature;
+  AppData.Buffer[i++] =(uint16_t)  humidity;
 
-  AppData.Buffer[i++] = (uint8_t)((humidity >> 8) & 0xFF);
-  AppData.Buffer[i++] = (uint8_t)(humidity & 0xFF);
+
 
   AppData.BufferSize = i;
 #endif /* CAYENNE_LPP */
@@ -438,6 +490,24 @@ static void OnTxTimerEvent(void *context)
   /* USER CODE END OnTxTimerEvent_2 */
 }
 
+/* USER CODE BEGIN PrFD_LedEvents */
+static void OnTxTimerLedEvent(void *context)
+{
+
+}
+
+static void OnRxTimerLedEvent(void *context)
+{
+
+}
+
+static void OnJoinTimerLedEvent(void *context)
+{
+  BSP_LED_Toggle(LED_RED) ;
+}
+
+/* USER CODE END PrFD_LedEvents */
+
 static void OnTxData(LmHandlerTxParams_t *params)
 {
   /* USER CODE BEGIN OnTxData_1 */
@@ -446,6 +516,9 @@ static void OnTxData(LmHandlerTxParams_t *params)
     /* Process Tx event only if its a mcps response to prevent some internal events (mlme) */
     if (params->IsMcpsConfirm != 0)
     {
+
+      UTIL_TIMER_Start(&TxLedTimer);
+
       APP_LOG(TS_OFF, VLEVEL_M, "\r\n###### ========== MCPS-Confirm =============\r\n");
       APP_LOG(TS_OFF, VLEVEL_H, "###### U/L FRAME:%04d | PORT:%d | DR:%d | PWR:%d", params->UplinkCounter,
               params->AppData.Port, params->Datarate, params->TxPower);
@@ -471,6 +544,9 @@ static void OnJoinRequest(LmHandlerJoinParams_t *joinParams)
   {
     if (joinParams->Status == LORAMAC_HANDLER_SUCCESS)
     {
+      UTIL_TIMER_Stop(&JoinLedTimer);
+      BSP_LED_Off(LED_RED) ;
+
       APP_LOG(TS_OFF, VLEVEL_M, "\r\n###### = JOINED = ");
       if (joinParams->Mode == ACTIVATION_TYPE_ABP)
       {
